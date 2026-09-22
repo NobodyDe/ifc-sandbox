@@ -11,6 +11,9 @@ importers:
       '@thatopen/components':
         specifier: ^3.4.8
         version: 3.4.8(@thatopen/fragments@3.4.7(three@0.186.0)(web-ifc@0.0.77))(camera-controls@3.1.2(three@0.186.0))(three@0.186.0)(web-ifc@0.0.77)
+      '@thatopen/components-front':
+        specifier: 3.4.4
+        version: 3.4.4(@thatopen/fragments@3.4.7(three@0.186.0)(web-ifc@0.0.77))(camera-controls@3.1.2(three@0.186.0))(three@0.186.0)(web-ifc@0.0.77)
       '@thatopen/fragments':
         specifier: ^3.4.7
         version: 3.4.7(three@0.186.0)(web-ifc@0.0.77)
@@ -433,6 +436,13 @@ packages:
     resolution: {integrity: sha512-yYU8cogLeSh/ms2jh8Fj7jaba/EWa7Ja6GoUqYZaraEuCI5YS6ms6ObZgjjedm+jm6XZjdNRWBpPP6Z86oOxcw==}
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7 || ^8
+
+  '@thatopen/components-front@3.4.4':
+    resolution: {integrity: sha512-uwJmT76CNaIU5fQuKK37OtV7qPyJdWs46oxRqGEPemhI84NudchPKZOCFdKLTlgLBvzXilPg6fszO5oB3wT5+A==}
+    peerDependencies:
+      '@thatopen/fragments': ~3.4.0
+      three: '>=0.182.0'
+      web-ifc: '>=0.0.77'
 
   '@thatopen/components@3.4.8':
     resolution: {integrity: sha512-eil8zla7W45WI1Pf/xAcY4oQpmb7pDJnyN9jWP2rkuboGIol+RyGCo9XHR2GnL9Ckgb+Jd595oXhyiotQ8lVAA==}
@@ -1585,6 +1595,16 @@ snapshots:
       '@tailwindcss/oxide': 4.3.3
       tailwindcss: 4.3.3
       vite: 8.3.0(@types/node@24.13.6)(jiti@2.7.0)
+
+  '@thatopen/components-front@3.4.4(@thatopen/fragments@3.4.7(three@0.186.0)(web-ifc@0.0.77))(camera-controls@3.1.2(three@0.186.0))(three@0.186.0)(web-ifc@0.0.77)':
+    dependencies:
+      '@thatopen/components': 3.4.8(@thatopen/fragments@3.4.7(three@0.186.0)(web-ifc@0.0.77))(camera-controls@3.1.2(three@0.186.0))(three@0.186.0)(web-ifc@0.0.77)
+      '@thatopen/fragments': 3.4.7(three@0.186.0)(web-ifc@0.0.77)
+      earcut: 3.2.3
+      three: 0.186.0
+      web-ifc: 0.0.77
+    transitivePeerDependencies:
+      - camera-controls
 
   '@thatopen/components@3.4.8(@thatopen/fragments@3.4.7(three@0.186.0)(web-ifc@0.0.77))(camera-controls@3.1.2(three@0.186.0))(three@0.186.0)(web-ifc@0.0.77)':
     dependencies:

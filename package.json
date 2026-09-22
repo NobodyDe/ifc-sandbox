@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@thatopen/components": "^3.4.8",
+    "@thatopen/components-front": "3.4.4",
     "@thatopen/fragments": "^3.4.7",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
