@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as OBC from "@thatopen/components";
+import * as OBF from "@thatopen/components-front";
 import * as THREE from "three";
 import {
   MODEL_ALIGNMENT_Y,
@@ -8,9 +9,13 @@ import {
   fitCameraToBox,
   getWorldBox,
 } from "./sceneFraming";
+import { setupPostproduction } from "./postproduction";
+import { castShadowsOnModel, setupShadowedScene } from "./sceneShadows";
+import { createSkyTexture } from "./skyGradient";
 import { SensorMarkers } from "./sensorMarkers";
 import { SENSORS } from "./sensorsData";
 import { useCoordinateProbe } from "./useCoordinateProbe";
+import { useSectionPlanes } from "./useSectionPlanes";
 import { useSensorSelection } from "./useSensorSelection";
 import type { IfcWorld } from "./types";
 
@@ -52,6 +57,13 @@ export function useIfcViewer() {
     enabled: modelLoaded,
   });
 
+  const sections = useSectionPlanes({
+    componentsRef,
+    worldRef,
+    worldBoxRef,
+    enabled: modelLoaded,
+  });
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -63,28 +75,18 @@ export function useIfcViewer() {
 
     const worlds = components.get(OBC.Worlds);
     const world = worlds.create<
-      OBC.SimpleScene,
+      OBC.ShadowedScene,
       OBC.OrthoPerspectiveCamera,
-      OBC.SimpleRenderer
+      OBF.PostproductionRenderer
     >();
     worldRef.current = world;
 
-    world.scene = new OBC.SimpleScene(components);
-    world.scene.setup({
-      ambientLight: { color: new THREE.Color("#ffffff"), intensity: 1.1 },
-      directionalLight: {
-        color: new THREE.Color("#fff8ef"),
-        intensity: 2.4,
-        position: new THREE.Vector3(40, 80, 30),
-      },
-    });
-    // Fundo transparente: o degradê fica no CSS do container, que dá um
-    // resultado melhor do que uma cor chapada na cena.
-    world.scene.three.background = null;
+    world.scene = new OBC.ShadowedScene(components);
 
-    world.renderer = new OBC.SimpleRenderer(components, container, {
-      antialias: true,
-    });
+    // Sem `antialias`: o WebGL só aplica MSAA no canvas, e com pós-processamento
+    // nada é desenhado direto nele. O SMAA do pós cobre isso.
+    const renderer = new OBF.PostproductionRenderer(components, container);
+    world.renderer = renderer;
     world.camera = new OBC.OrthoPerspectiveCamera(components);
 
     components.init();
@@ -104,6 +106,34 @@ export function useIfcViewer() {
     grid.config.color = new THREE.Color("#94a3b8");
     gridRef.current = grid;
 
+    setupShadowedScene(world.scene, renderer, grid);
+    setupPostproduction(renderer, grid);
+
+    // O renderer passou a desenhar sob demanda, então tudo que muda a imagem
+    // precisa pedir um quadro. Mexer na geometria ou na luz também invalida o
+    // mapa de sombra; girar a câmera, não.
+    const requestFrame = () => {
+      renderer.needsUpdate = true;
+    };
+    const requestFrameWithShadows = () => {
+      renderer.three.shadowMap.needsUpdate = true;
+      renderer.needsUpdate = true;
+    };
+
+    // A luz de sombra é reposicionada de forma assíncrona, por um worker, bem
+    // depois da chamada que a pediu — sem isto o novo ângulo só apareceria no
+    // próximo movimento de câmera.
+    world.scene.distanceRenderer.onDistanceComputed.add(requestFrameWithShadows);
+
+    // O primeiro quadro precisa ser pedido explicitamente: a câmera já foi
+    // posicionada acima, enquanto o renderer ainda estava em automático, então
+    // não há nenhum evento pendente para disparar o desenho inicial.
+    requestFrameWithShadows();
+
+    // Depois do setup da cena, que reinstala a cor de fundo padrão.
+    const sky = createSkyTexture();
+    world.scene.three.background = sky;
+
     const setup = async () => {
       const ifcLoader = components.get(OBC.IfcLoader);
       ifcLoaderRef.current = ifcLoader;
@@ -121,14 +151,34 @@ export function useIfcViewer() {
       const fragments = components.get(OBC.FragmentsManager);
       fragments.init(workerUrl);
 
-      world.camera.controls.addEventListener("update", () =>
-        fragments.core.update(),
-      );
+      world.camera.controls.addEventListener("update", () => {
+        requestFrame();
+        void fragments.core.update();
+      });
+
+      // A sombra é calculada para o trecho de cena que está na frente da
+      // câmera, então precisa ser refeita quando a vista muda. "rest" dispara
+      // quando o movimento termina: recalcular durante o arrasto custaria um
+      // render extra e uma leitura de pixels por quadro.
+      //
+      // Só com modelo em cena. Sem geometria visível, o cálculo de distância
+      // da biblioteca não acha pixel nenhum, devolve -Infinity, e o raio da
+      // sombra (`distância - deslocamento`) vira NaN — que gruda na posição da
+      // luz e mata a sombra até alguém recalcular com sucesso.
+      world.camera.controls.addEventListener("rest", () => {
+        if (!worldBoxRef.current) return;
+        void world.scene.updateShadows();
+      });
 
       fragments.list.onItemSet.add(({ value: model }) => {
         model.useCamera(world.camera.three);
+        castShadowsOnModel(model);
+        // Os tiles chegam aos poucos, conforme o campo de visão: cada um que
+        // nasce é geometria nova em cena e no mapa de sombra.
+        model.tiles.onItemSet.add(requestFrameWithShadows);
         modelRoot.add(model.object);
-        fragments.core.update(true);
+        void fragments.core.update(true);
+        requestFrameWithShadows();
       });
 
       // evita z-fighting entre paredes/lajes coincidentes (comum em modelo de hotel)
@@ -152,6 +202,7 @@ export function useIfcViewer() {
     const handleResize = () => {
       world.renderer?.resize();
       world.camera?.updateAspect();
+      requestFrame();
     };
     window.addEventListener("resize", handleResize);
 
@@ -159,6 +210,7 @@ export function useIfcViewer() {
       cancelled = true;
       window.removeEventListener("resize", handleResize);
       markers.dispose();
+      sky.dispose();
       components.dispose();
       componentsRef.current = null;
       worldRef.current = null;
@@ -175,9 +227,10 @@ export function useIfcViewer() {
   const loadIfcFile = useCallback(async (file: File) => {
     const ifcLoader = ifcLoaderRef.current;
     const world = worldRef.current;
+    const renderer = world?.renderer;
     const grid = gridRef.current;
     const modelRoot = modelRootRef.current;
-    if (!ifcLoader || !world || !grid || !modelRoot) return;
+    if (!ifcLoader || !world || !renderer || !grid || !modelRoot) return;
 
     setConverting(true);
     setProgress(0);
@@ -197,6 +250,11 @@ export function useIfcViewer() {
       worldBoxRef.current = worldBox;
       alignGridToModelBase(grid, worldBox);
       await fitCameraToBox(world.camera, worldBox, false);
+      // Depois de enquadrar, e não antes: o cálculo parte da posição final da
+      // câmera para dimensionar a área coberta pela sombra.
+      await world.scene.updateShadows();
+      renderer.three.shadowMap.needsUpdate = true;
+      renderer.needsUpdate = true;
       setModelLoaded(true);
     } finally {
       setConverting(false);
@@ -218,7 +276,7 @@ export function useIfcViewer() {
     modelLoaded,
     loadIfcFile,
     fitToModel,
-    sensors: SENSORS,
     ...selection,
+    ...sections,
   };
 }

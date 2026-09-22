@@ -1,6 +1,18 @@
 import type { ChangeEvent } from "react";
 import { SensorPopup } from "./SensorPopup";
 import { useIfcViewer } from "./useIfcViewer";
+import type { SectionAxis } from "./useSectionPlanes";
+
+/**
+ * Os eixos em linguagem de obra. X e Z são perpendiculares entre si no plano
+ * horizontal, então geram cortes verticais em direções diferentes; Y é o
+ * corte na altura, que é a planta baixa.
+ */
+const SECTION_BUTTONS: { axis: SectionAxis; label: string; hint: string }[] = [
+  { axis: "x", label: "Vertical X", hint: "Corta no sentido da largura" },
+  { axis: "z", label: "Vertical Z", hint: "Corta no sentido da profundidade" },
+  { axis: "y", label: "Horizontal Y", hint: "Planta baixa, corta na altura" },
+];
 
 export function IfcViewer() {
   const {
@@ -11,10 +23,14 @@ export function IfcViewer() {
     modelLoaded,
     loadIfcFile,
     fitToModel,
-    sensors,
     selected,
     screenPosition,
     clearSelection,
+    sectionCount,
+    handlesVisible,
+    createSection,
+    clearSections,
+    toggleHandles,
   } = useIfcViewer();
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -22,8 +38,10 @@ export function IfcViewer() {
     if (file) void loadIfcFile(file);
   };
 
+  // O degradê agora é o céu da cena. O fundo aqui é só o instante antes de o
+  // WebGL desenhar o primeiro quadro.
   return (
-    <div className="relative h-screen w-full bg-linear-to-b from-slate-200 to-slate-400">
+    <div className="relative h-screen w-full bg-slate-300">
       <div ref={containerRef} className="h-full w-full" />
 
       {selected && screenPosition && (
@@ -71,33 +89,54 @@ export function IfcViewer() {
 
       {modelLoaded && (
         <aside className="absolute top-24 right-4 w-60 rounded-xl bg-white/85 p-3 shadow-lg ring-1 ring-slate-900/10 backdrop-blur">
-          <h2 className="text-sm font-semibold text-slate-900">Sensores</h2>
+          <h2 className="text-sm font-semibold text-slate-900">Cortes</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            Clique em um pino para ver as leituras.
+            O corte nasce no meio do modelo. Arraste a seta para deslocá-lo.
           </p>
 
-          <ul className="mt-2 space-y-1">
-            {sensors.map((sensor, index) => (
-              <li
-                key={sensor.id}
-                className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-xs ${
-                  selected?.sensor.id === sensor.id
-                    ? "bg-cyan-100"
-                    : "bg-slate-100"
-                }`}
+          <div className="mt-2 space-y-1">
+            {SECTION_BUTTONS.map(({ axis, label, hint }) => (
+              <button
+                key={axis}
+                type="button"
+                title={hint}
+                onClick={() => createSection(axis)}
+                className="flex w-full items-center justify-between rounded-md bg-slate-100 px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200"
               >
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-600 text-[10px] font-bold text-white">
-                  {index + 1}
+                {label}
+                <span aria-hidden className="text-slate-400">
+                  +
                 </span>
-                <span className="flex-1 truncate text-slate-600">
-                  {sensor.facade} &middot; {sensor.storey}
-                </span>
-                <span className="font-mono text-slate-500">
-                  {sensor.temperature.toFixed(1)}&deg;
-                </span>
-              </li>
+              </button>
             ))}
-          </ul>
+          </div>
+
+          <div className="mt-3 border-t border-slate-200 pt-2">
+            <p className="text-xs text-slate-500">
+              {sectionCount === 0
+                ? "Nenhum corte ativo"
+                : `${sectionCount} corte${sectionCount > 1 ? "s" : ""} ativo${sectionCount > 1 ? "s" : ""}`}
+            </p>
+
+            <div className="mt-2 space-y-1">
+              <button
+                type="button"
+                onClick={toggleHandles}
+                disabled={sectionCount === 0}
+                className="w-full rounded-md bg-slate-100 px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 disabled:opacity-40 disabled:hover:bg-slate-100"
+              >
+                {handlesVisible ? "Ocultar alças" : "Mostrar alças"}
+              </button>
+              <button
+                type="button"
+                onClick={clearSections}
+                disabled={sectionCount === 0}
+                className="w-full rounded-md bg-slate-900 px-2 py-1.5 text-xs font-medium text-white hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-900"
+              >
+                Remover cortes
+              </button>
+            </div>
+          </div>
         </aside>
       )}
     </div>

@@ -1,11 +1,12 @@
 import type * as THREE from "three";
 import type * as OBC from "@thatopen/components";
+import type * as OBF from "@thatopen/components-front";
 
 /** O mundo 3D usado pelo visualizador (cena + câmera + renderer). */
 export type IfcWorld = OBC.SimpleWorld<
-  OBC.SimpleScene,
+  OBC.ShadowedScene,
   OBC.OrthoPerspectiveCamera,
-  OBC.SimpleRenderer
+  OBF.PostproductionRenderer
 >;
 
 /** Um sensor instalado na fachada. */

@@ -134,7 +134,9 @@ export function useSensorSelection({
     const markers = markersRef.current;
 
     markers?.setSelected(selected?.sensor.id ?? null);
-    world?.renderer?.update();
+    // Pede um quadro: o renderer desenha sob demanda, então trocar o destaque
+    // do pino não apareceria sozinho.
+    if (world?.renderer) world.renderer.needsUpdate = true;
 
     if (!world || !container || !selected) {
       setScreenPosition(null);
